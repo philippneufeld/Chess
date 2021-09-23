@@ -1,0 +1,9 @@
+# virtual environments
+venv/
+.venv/
+
+# VS code config files
+.vscode/
+
+# PyCharm config files
+.idea/
