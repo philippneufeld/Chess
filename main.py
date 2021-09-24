@@ -138,6 +138,30 @@ class BoardTile:
             self.piece.draw(screen, self.x, self.y, self.size)
 
 
+class Board:
+
+    def __init__(self, tile_size):
+        self.tiles = [BoardTile(idx // 8, idx % 8, tile_size) for idx in range(64)]
+
+    def draw(self, screen):
+        for tile in self.tiles:
+            tile.draw(screen)
+
+    def is_pos_valid(self, pos):
+        row, col = pos
+        return (0 <= row <= 7 and 0 <= col <= 7)
+
+    def get_tile(self, pos) -> BoardTile:
+        if not self.is_pos_valid(pos):
+            raise RuntimeError("Invalid position")
+        row, col = pos
+        return self.tiles[row*8+col]
+
+    def change_all_to_default(self):
+        for tile in self.tiles:
+            tile.change_to_default()
+
+
 class PartialMove:
 
     def __init__(self, pos, src_piece: Piece, dst_piece: Piece):
@@ -161,6 +185,9 @@ class Move:
 
     def get_non_kill_pos(self):
         return None
+
+    def color_board(self):
+        pass
 
 
 class NormalMove(Move):
@@ -186,12 +213,11 @@ class NormalMove(Move):
         return self.dst_pos if self.kill_piece is None else None 
 
 
-class Board:
+class Game:
 
     def __init__(self, size, img_path):
         self.tile_size = size // 8
-        self.tiles = [BoardTile(idx // 8, idx % 8, self.tile_size)
-                      for idx in range(64)]
+        self.board = Board(self.tile_size)
 
         img_pieces = pygame.image.load(img_path)
         rect = img_pieces.get_rect()
@@ -205,48 +231,36 @@ class Board:
             base_row = [0, 7]
             pawn_row = [1, 6]
 
-            self.get_tile((base_row[i], 0)).piece = Rook(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 1)).piece = Knight(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 2)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 3)).piece = Queen(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 4)).piece = King(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 5)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 6)).piece = Knight(is_black[i], img_pieces, img_piece_size)
-            self.get_tile((base_row[i], 7)).piece = Rook(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 0)).piece = Rook(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 1)).piece = Knight(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 2)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 3)).piece = Queen(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 4)).piece = King(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 5)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 6)).piece = Knight(is_black[i], img_pieces, img_piece_size)
+            self.board.get_tile((base_row[i], 7)).piece = Rook(is_black[i], img_pieces, img_piece_size)
 
             for j in range(8):
-                self.get_tile((pawn_row[i], j)).piece = Pawn(is_black[i], img_pieces, img_piece_size)
+                self.board.get_tile((pawn_row[i], j)).piece = Pawn(is_black[i], img_pieces, img_piece_size)
 
         # create moves array
         self.moves = []
         
         self.piece_selected = False
+        self.black_turn = False
         self.selectable_moves = {}
 
-    def draw(self, screen):
-        for tile in self.tiles:
-            tile.draw(screen)
-
-    def is_pos_valid(self, pos):
-        row, col = pos
-        return (0 <= row <= 7 and 0 <= col <= 7)
-
-    def get_tile(self, pos) -> BoardTile:
-        if not self.is_pos_valid(pos):
-            raise RuntimeError("Invalid position")
-        row, col = pos
-        return self.tiles[row*8+col]
-
-    def get_piece(self, pos) -> Piece:
-        return self.get_tile(pos).piece
+    def draw_board(self, screen):
+        self.board.draw(screen)
 
     def push_move(self, move: Move):      
         for pm in move.get_partial_moves():
-            tile = self.get_tile(pm.pos)
+            tile = self.board.get_tile(pm.pos)
             if tile.piece is not pm.src_piece:
                 raise RuntimeError("Invalid move")
             tile.piece = pm.dst_piece 
         self.moves.append(move)
+        self.black_turn = not self.black_turn
 
     def pop_move(self):      
         if len(self.moves) == 0:
@@ -254,13 +268,15 @@ class Board:
 
         move = self.moves.pop()
         for pm in reversed(move.get_partial_moves()):
-            tile = self.get_tile(pm.pos)
+            tile = self.board.get_tile(pm.pos)
             if tile.piece is not pm.dst_piece:
                 raise RuntimeError("Invalid move")
             tile.piece = pm.src_piece
 
+        self.black_turn = not self.black_turn
+
     def generate_moves(self, pos):
-        piece: Piece = self.get_piece(pos)
+        piece: Piece = self.board.get_tile(pos).piece
         if piece is None:
             return
         else:
@@ -270,11 +286,11 @@ class Board:
 
                         # generate new position
                         dst_pos = pos[0] + i * vec[0], pos[1] + i * vec[1]
-                        if not self.is_pos_valid(dst_pos):
+                        if not self.board.is_pos_valid(dst_pos):
                             break
 
                         # if the dst_piece is friendly cannot occupy its tile
-                        dst_piece = self.get_tile(dst_pos).piece
+                        dst_piece = self.board.get_tile(dst_pos).piece
 
                         if basis.kill_level == 2 and dst_piece is None:
                             break   # 2 means that the move must kill
@@ -290,17 +306,15 @@ class Board:
     def on_click(self, mouse_pos):
         pos = mouse_pos[1] // self.tile_size, mouse_pos[0] // self.tile_size
 
-        for tile in self.tiles:
-            tile.change_to_default()
+        self.board.change_all_to_default()
 
         try:
-            piece = self.get_piece(pos)
+            piece = self.board.get_tile(pos).piece
         except Exception:
             piece = None
 
-        if piece is not None and not self.piece_selected:
-
-            self.get_tile(pos).change_to_selected()
+        if piece is not None and piece.is_black == self.black_turn and not self.piece_selected:
+            self.board.get_tile(pos).change_to_selected()
 
             self.piece_selected = True
             self.selectable_moves = {}
@@ -311,14 +325,14 @@ class Board:
                 if kill_pos is not None:
                     if kill_pos in self.selectable_moves:
                         raise RuntimeError(f"Move to {kill_pos} already present")
-                    self.get_tile(kill_pos).change_to_killable()
+                    self.board.get_tile(kill_pos).change_to_killable()
                     self.selectable_moves[kill_pos] = move
 
                 non_kill_pos = move.get_non_kill_pos()
                 if non_kill_pos is not None:
                     if non_kill_pos in self.selectable_moves:
                         raise RuntimeError(f"Move to {kill_pos} already present")
-                    self.get_tile(non_kill_pos).change_to_movable()
+                    self.board.get_tile(non_kill_pos).change_to_movable()
                     self.selectable_moves[non_kill_pos] = move
         else:
             if pos in self.selectable_moves:
@@ -335,17 +349,8 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((width, width))
     pygame.display.set_caption("Chess")
 
-    board = Board(width, 'chess_pieces.png')
-
-
-    board.push_move(NormalMove((1, 1), (2, 1), board.get_tile((1, 1)).piece, None))
-    board.push_move(NormalMove((2, 1), (3, 1), board.get_tile((2, 1)).piece, None))
-    board.push_move(NormalMove((3, 1), (4, 1), board.get_tile((3, 1)).piece, None))
-    board.pop_move()
-    board.pop_move()
-    board.pop_move()
-
-    board.draw(screen)
+    game = Game(width, 'chess_pieces.png')
+    game.draw_board(screen)
 
     running = True
     while running:
@@ -356,9 +361,9 @@ if __name__ == "__main__":
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                board.on_click(event.dict['pos'])
+                game.on_click(event.dict['pos'])
 
-        board.draw(screen)
+        game.draw_board(screen)
         pygame.display.update()
         time.sleep(.01)
 
