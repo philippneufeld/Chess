@@ -7,3 +7,6 @@ venv/
 
 # PyCharm config files
 .idea/
+
+# pycahce
+__pycache__/
