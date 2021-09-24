@@ -86,7 +86,7 @@ class Knight(Piece):
 
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(2, -1), (2, 1), (-2, -1), (-2, 1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
-            yield PieceMovementDescriptor(vec, 8, 1)
+            yield PieceMovementDescriptor(vec, 1, 1)
 
 
 class Rook(Piece):
