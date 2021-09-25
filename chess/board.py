@@ -40,6 +40,10 @@ class BoardTile:
     def change_to_killable(self) -> None:
         self._color = self.RED
 
+    def change_to_check(self) -> None:
+        if self._color is not self.YELLOW:
+            self.change_to_killable()
+
     def draw(self, screen) -> None:
         rect_border = (self._x, self._y, self._size, self._size)
         rect = (self._x, self._y, self._size - 1, self._size - 1)

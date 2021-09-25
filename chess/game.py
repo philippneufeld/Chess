@@ -23,14 +23,17 @@ class Game:
         self._piece_selected = False
         self._selectable_moves = {}
 
-    def draw(self, screen):
+    def draw(self, screen) -> None:
         self._game_manager.draw(screen)
         pygame.display.update()
 
-    def on_click(self, mouse_pos):
+    def on_click(self, mouse_pos: Tuple[int, int]) -> None:
         pos = mouse_pos[1] // self._tile_size, mouse_pos[0] // self._tile_size
 
         self._game_manager.reset_board_highlights()
+
+        if self._game_manager.is_game_over:
+            return
 
         try:
             piece = self._game_manager.board.get_tile(pos).piece
@@ -55,7 +58,7 @@ class Game:
             self._piece_selected = False
             self._selectable_moves = {}
 
-    def run(self):
+    def run(self) -> None:
         
         screen = pygame.display.set_mode((self._size, self._size))
         pygame.display.set_caption("Chess")

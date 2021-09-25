@@ -1,41 +1,45 @@
 # Copyright Philipp Neufeld, 2021
+from typing import Tuple
 from chess.board import Board
 
 class Move:
 
-    def __init__(self):
-        pass
+    def __init__(self, piece):
+        self._piece = piece
+        if self._piece is None:
+            raise RuntimeError("Invalid move")
 
-    def __repr__(self):
+    @property
+    def piece(self):
+        return self._piece
+
+    def __repr__(self) -> str:
         return "Unknown move"
 
-    def get_activation_pos(self):
+    def get_activation_pos(self) -> Tuple[int, int]:
         raise NotImplementedError
 
-    def execute(self, board: Board):
+    def execute(self, board: Board) -> None:
         raise NotImplementedError
 
-    def undo(self, board: Board):
+    def undo(self, board: Board) -> None:
         raise NotImplementedError
 
-    def color_board(self, board: Board):
+    def color_board(self, board: Board) -> None:
         raise NotImplementedError
 
 
 class NormalMove(Move):
 
     def __init__(self, src_pos, dst_pos, piece):
+        super().__init__(piece)
         self._src_pos = src_pos
         self._dst_pos = dst_pos
-        self._piece = piece
 
-        if self._piece is None:
-            raise RuntimeError("Invalid move")
-
-    def get_activation_pos(self):
+    def get_activation_pos(self) -> Tuple[int, int]:
         return self._dst_pos
 
-    def execute(self, board: Board):
+    def execute(self, board: Board) -> None:
         src_tile = board.get_tile(self._src_pos)
         dst_tile = board.get_tile(self._dst_pos)
 
@@ -47,7 +51,7 @@ class NormalMove(Move):
         src_tile.piece = None
         dst_tile.piece = self._piece
 
-    def undo(self, board: Board):
+    def undo(self, board: Board) -> None:
         src_tile = board.get_tile(self._src_pos)
         dst_tile = board.get_tile(self._dst_pos)
 
@@ -59,7 +63,7 @@ class NormalMove(Move):
         dst_tile.piece = None
         src_tile.piece = self._piece
 
-    def color_board(self, board: Board):
+    def color_board(self, board: Board) -> None:
         dst_tile = board.get_tile(self._dst_pos)
         dst_tile.change_to_movable()
 
@@ -67,18 +71,21 @@ class NormalMove(Move):
 class KillMove(Move):
 
     def __init__(self, src_pos, dst_pos, piece, kill_piece):
+        super().__init__(piece)
         self._src_pos = src_pos
         self._dst_pos = dst_pos
-        self._piece = piece
         self._kill_piece = kill_piece
 
-        if self._piece is None or self._kill_piece is None:
+        if self._kill_piece is None:
             raise RuntimeError("Invalid move")
 
-    def get_activation_pos(self):
+    def get_activation_pos(self) -> Tuple[int, int]:
         return self._dst_pos
 
-    def execute(self, board: Board):
+    def get_attack_pos(self) -> Tuple[int, int]:
+        return self._dst_pos
+
+    def execute(self, board: Board) -> None:
         src_tile = board.get_tile(self._src_pos)
         dst_tile = board.get_tile(self._dst_pos)
 
@@ -90,7 +97,7 @@ class KillMove(Move):
         src_tile.piece = None
         dst_tile.piece = self._piece
 
-    def undo(self, board: Board):
+    def undo(self, board: Board) -> None:
         src_tile = board.get_tile(self._src_pos)
         dst_tile = board.get_tile(self._dst_pos)
 
@@ -101,7 +108,7 @@ class KillMove(Move):
         dst_tile.piece = self._kill_piece
         src_tile.piece = self._piece
 
-    def color_board(self, board: Board):
+    def color_board(self, board: Board) -> None:
         dst_tile = board.get_tile(self._dst_pos)
         dst_tile.change_to_killable()
         
