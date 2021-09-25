@@ -35,6 +35,9 @@ class Piece:
         self._full_size_img.blit(img, (0, 0), (*img_pos, img_size, img_size))
         self._img = self._full_size_img   
 
+    def __repr__(self) -> str:
+        return "?"
+
     @property
     def is_black(self) -> bool:
         return self._is_black
@@ -54,6 +57,9 @@ class King(Piece):
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 0, img_size)
 
+    def __repr__(self) -> str:
+        return "K"
+
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, -1), (-1, 1)]:
             yield PieceMovementDescriptor(vec, 1, 1)
@@ -63,6 +69,9 @@ class Queen(Piece):
 
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 1, img_size)
+
+    def __repr__(self) -> str:
+        return "Q"
 
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, -1), (-1, 1)]:
@@ -74,6 +83,9 @@ class Bishop(Piece):
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 2, img_size)
 
+    def __repr__(self) -> str:
+        return "B"
+
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(1, 1), (1, -1), (-1, -1), (-1, 1)]:
             yield PieceMovementDescriptor(vec, 8, 1)
@@ -83,6 +95,9 @@ class Knight(Piece):
 
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 3, img_size)
+
+    def __repr__(self) -> str:
+        return "N"
 
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(2, -1), (2, 1), (-2, -1), (-2, 1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
@@ -94,6 +109,9 @@ class Rook(Piece):
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 4, img_size)
 
+    def __repr__(self) -> str:
+        return "R"
+
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         for vec in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             yield PieceMovementDescriptor(vec, 8, 1)
@@ -103,6 +121,9 @@ class Pawn(Piece):
 
     def __init__(self, is_black: bool, img, img_size: int):
         super().__init__(is_black, img, 5, img_size)
+
+    def __repr__(self) -> str:
+        return ""
 
     def get_movement_bases(self, pos: Tuple[int, int]) -> Generator[PieceMovementDescriptor, None, None]:
         is_base_row = pos[0] == (1 if self.is_black else 6)

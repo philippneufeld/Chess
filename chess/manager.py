@@ -50,6 +50,10 @@ class GameManager:
         return self._board
 
     @property
+    def moves(self) -> List[Move]:
+        return self._moves
+
+    @property
     def black_turn(self) -> bool:
         return self._black_turn
 
@@ -91,7 +95,7 @@ class GameManager:
             if self._is_in_check[self._black_turn]:
                 print(f"{'black' if not self._black_turn else 'white'} wins!")
             else:
-                print("Stalemate!")  
+                print("Stalemate!")
 
     def pop_move(self) -> None:      
         move = self._moves.pop()

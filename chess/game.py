@@ -4,7 +4,6 @@ import pygame
 import time
 from chess.manager import GameManager
 
-
 class Game:
 
     def __init__(self, size, img_path):

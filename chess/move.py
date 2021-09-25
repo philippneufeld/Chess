@@ -9,12 +9,16 @@ class Move:
         if self._piece is None:
             raise RuntimeError("Invalid move")
 
+    @staticmethod
+    def board_pos_repr(pos: Tuple[int, int]) -> str:
+        return f"{chr(97 + pos[1])}{8-pos[0]}"
+
     @property
     def piece(self):
         return self._piece
 
     def __repr__(self) -> str:
-        return "Unknown move"
+        return f"Unknown move ({self._piece})"
 
     def get_activation_pos(self) -> Tuple[int, int]:
         raise NotImplementedError
@@ -31,10 +35,13 @@ class Move:
 
 class NormalMove(Move):
 
-    def __init__(self, src_pos, dst_pos, piece):
+    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece):
         super().__init__(piece)
         self._src_pos = src_pos
         self._dst_pos = dst_pos
+
+    def __repr__(self) -> str:
+        return f"{self._piece}{self.board_pos_repr(self._src_pos)}-{self.board_pos_repr(self._dst_pos)}"
 
     def get_activation_pos(self) -> Tuple[int, int]:
         return self._dst_pos
@@ -70,7 +77,7 @@ class NormalMove(Move):
         
 class KillMove(Move):
 
-    def __init__(self, src_pos, dst_pos, piece, kill_piece):
+    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece, kill_piece):
         super().__init__(piece)
         self._src_pos = src_pos
         self._dst_pos = dst_pos
@@ -78,6 +85,9 @@ class KillMove(Move):
 
         if self._kill_piece is None:
             raise RuntimeError("Invalid move")
+
+    def __repr__(self) -> str:
+        return f"{self._piece}{self.board_pos_repr(self._src_pos)}-x{self.board_pos_repr(self._dst_pos)}"
 
     def get_activation_pos(self) -> Tuple[int, int]:
         return self._dst_pos
