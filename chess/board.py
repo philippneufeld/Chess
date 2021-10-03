@@ -10,6 +10,7 @@ class BoardTile:
     YELLOW = (214, 204, 0)
     BLUE = (50, 255, 255)
     RED = (255, 50, 50)
+    VIOLET = (255, 0, 255)
     BLACK = (0, 0, 0)
 
     def __init__(self, row: int, col: int, size: int):
@@ -39,6 +40,9 @@ class BoardTile:
 
     def change_to_killable(self) -> None:
         self._color = self.RED
+
+    def change_to_special(self) -> None:
+        self._color = self.VIOLET
 
     def change_to_check(self) -> None:
         if self._color is not self.YELLOW:

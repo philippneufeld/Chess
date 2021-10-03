@@ -3,7 +3,7 @@ from typing import List, Generator, Tuple
 import itertools
 from chess.piece import Piece, Rook, Knight, Bishop, Queen, King, Pawn
 from chess.board import Board
-from chess.move import Move, NormalMove, KillMove
+from chess.move import Move, NormalMove, KillMove, PawnDoubleStepMove, EnPassantMove
 
 
 class GameManager:
@@ -113,6 +113,7 @@ class GameManager:
         if piece is None:
             return
         else:
+            # Generate normal moves
             for basis in piece.get_movement_bases(pos):
                 for i in range(1, basis.max_steps + 1):
 
@@ -130,7 +131,10 @@ class GameManager:
                     elif dst_piece is not None and (piece.is_black == dst_piece.is_black or basis.kill_level == 0):
                         break   # cannot kill dst_piece (either friendly or too low kill_level)
                     elif dst_piece is None:
-                        move = NormalMove(pos, dst_pos, piece)
+                        if isinstance(piece, Pawn) and (dst_pos[0] - pos[0]) == (2 if piece.is_black else -2) and pos[1] == dst_pos[1]:
+                            move = PawnDoubleStepMove(pos, dst_pos, piece)
+                        else:
+                            move = NormalMove(pos, dst_pos, piece)
                     else:
                         move = KillMove(pos, dst_pos, piece, dst_piece)
 
@@ -141,6 +145,24 @@ class GameManager:
                     # once another piece is hit the piece cannot go any further
                     if dst_piece is not None:
                         break
+            
+            # Generate special moves
+            if isinstance(piece, Pawn) and pos[0] == (4 if piece.is_black else 3):
+                if len(self.moves) > 0 and isinstance(self.moves[-1], PawnDoubleStepMove) and self.moves[-1].piece.is_black != piece.is_black:
+                    check_tiles = [(pos[0], pos[1] + 1), (pos[0], pos[1] - 1)]
+                    for kill_pos in check_tiles:
+                        dst_pos = (kill_pos[0] + (1 if piece.is_black else -1), kill_pos[1])
+
+                        if not self._board.is_pos_valid(kill_pos) or not self._board.is_pos_valid(dst_pos):
+                            continue
+                        
+                        dst_piece = self._board.get_tile(dst_pos).piece
+                        kill_piece = self._board.get_tile(kill_pos).piece
+                        
+                        if kill_piece is self.moves[-1].piece and dst_piece is None:
+                            yield EnPassantMove(pos, dst_pos, kill_pos, piece, kill_piece)
+                    
+
 
     def generate_all_moves(self, black: bool, check_test: bool=True) -> Generator[Move, None, None]:
         for pos in itertools.product(range(8), range(8)):
