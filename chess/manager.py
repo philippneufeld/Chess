@@ -3,7 +3,7 @@ from typing import List, Generator, Tuple
 import itertools
 from chess.piece import Piece, Rook, Knight, Bishop, Queen, King, Pawn
 from chess.board import Board
-from chess.move import Move, NormalMove, KillMove, PawnDoubleStepMove, EnPassantMove
+from chess.move import Move, NormalMove, GeneralKillMove, KillMove, PawnDoubleStepMove, EnPassantMove, PawnTransformMove, PawnTransformKillMove
 
 
 class GameManager:
@@ -11,23 +11,26 @@ class GameManager:
     def __init__(self, tile_size: int, img_pieces, img_piece_size: int):
         self._board = Board(tile_size)
 
+        self._img_pieces = img_pieces
+        self._img_piece_size = img_piece_size
+
         # Initialize pieces to start positions
         for i in [0, 1]:
             is_black = [True, False]
             base_row = [0, 7]
             pawn_row = [1, 6]
 
-            self._board.get_tile((base_row[i], 0)).piece = Rook(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 1)).piece = Knight(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 2)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 3)).piece = Queen(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 4)).piece = King(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 5)).piece = Bishop(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 6)).piece = Knight(is_black[i], img_pieces, img_piece_size)
-            self._board.get_tile((base_row[i], 7)).piece = Rook(is_black[i], img_pieces, img_piece_size)
+            self._board.get_tile((base_row[i], 0)).piece = self._create_piece(is_black[i], Rook)
+            self._board.get_tile((base_row[i], 1)).piece = self._create_piece(is_black[i], Knight)
+            self._board.get_tile((base_row[i], 2)).piece = self._create_piece(is_black[i], Bishop)
+            self._board.get_tile((base_row[i], 3)).piece = self._create_piece(is_black[i], Queen)
+            self._board.get_tile((base_row[i], 4)).piece = self._create_piece(is_black[i], King)
+            self._board.get_tile((base_row[i], 5)).piece = self._create_piece(is_black[i], Bishop)
+            self._board.get_tile((base_row[i], 6)).piece = self._create_piece(is_black[i], Knight)
+            self._board.get_tile((base_row[i], 7)).piece = self._create_piece(is_black[i], Rook)
 
             for j in range(8):
-                self._board.get_tile((pawn_row[i], j)).piece = Pawn(is_black[i], img_pieces, img_piece_size)
+                self._board.get_tile((pawn_row[i], j)).piece = self._create_piece(is_black[i], Pawn)
 
         # create moves array and game metrics
         self._moves = []
@@ -41,6 +44,11 @@ class GameManager:
         self._cached_available_moves = []
         self._cached_attacked_positions = []
         self._cached_is_in_check = []
+
+    def _create_piece(self, is_black: bool, piece_cls: type) -> Piece:
+        if not issubclass(piece_cls, Piece):
+            raise RuntimeError("Invalid piece class")
+        return piece_cls(is_black, self._img_pieces, self._img_piece_size)
 
     def reset_board_highlights(self) -> None:
         self._board.change_all_to_default()
@@ -125,20 +133,34 @@ class GameManager:
                     # if the dst_piece is friendly cannot occupy its tile
                     dst_piece = self._board.get_tile(dst_pos).piece
 
-                    move = None
+                    is_pawn_double_step = isinstance(piece, Pawn) and abs(dst_pos[0] - pos[0]) == 2
+                    is_pawn_transform = isinstance(piece, Pawn) and dst_pos[0] == (7 if piece.is_black else 0)
+
+                    moves = []
                     if basis.kill_level == 2 and dst_piece is None:
                         break   # 2 means that the move must kill
                     elif dst_piece is not None and (piece.is_black == dst_piece.is_black or basis.kill_level == 0):
                         break   # cannot kill dst_piece (either friendly or too low kill_level)
                     elif dst_piece is None:
-                        if isinstance(piece, Pawn) and (dst_pos[0] - pos[0]) == (2 if piece.is_black else -2) and pos[1] == dst_pos[1]:
-                            move = PawnDoubleStepMove(pos, dst_pos, piece)
+                        if is_pawn_double_step:
+                            moves.append(PawnDoubleStepMove(pos, dst_pos, piece))
+                        elif is_pawn_transform:
+                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Queen)))
+                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Rook)))
+                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Bishop)))
+                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Knight)))
                         else:
-                            move = NormalMove(pos, dst_pos, piece)
+                            moves.append(NormalMove(pos, dst_pos, piece))
                     else:
-                        move = KillMove(pos, dst_pos, piece, dst_piece)
+                        if is_pawn_transform:
+                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Queen)))
+                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Rook)))
+                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Bishop)))
+                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Knight)))
+                        else:
+                            moves.append(KillMove(pos, dst_pos, piece, dst_piece))
 
-                    if move is not None:   
+                    for move in moves:
                         if (not check_test) or self.try_move(move):
                             yield move
 
@@ -172,7 +194,7 @@ class GameManager:
 
     def generate_attacked_positions(self, black: bool) -> Generator[Tuple[int, int], None, None]:
         for move in self.generate_all_moves(black, check_test=False):
-            if isinstance(move, KillMove):
+            if isinstance(move, GeneralKillMove):
                 yield move.get_attack_pos()
 
     def get_king_position(self, black: bool) -> Tuple[int, int]:

@@ -1,7 +1,7 @@
 # Copyright Philipp Neufeld, 2021
 from typing import Tuple
 from chess.board import Board
-from chess.piece import Piece, Pawn
+from chess.piece import Piece, Pawn, Queen, Rook, Bishop, Knight
 
 class Move:
 
@@ -75,19 +75,7 @@ class NormalMove(Move):
         dst_tile = board.get_tile(self._dst_pos)
         dst_tile.change_to_movable()
 
-    
-class PawnDoubleStepMove(NormalMove):
-    
-    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece: Pawn):
-        super().__init__(src_pos, dst_pos, piece)
 
-        if not isinstance(piece, Pawn):
-            raise RuntimeError("Piece must be a pawn")
-
-        if (dst_pos[0] - src_pos[0]) != (2 if piece.is_black else -2) or src_pos[1] != dst_pos[1]:
-            raise RuntimeError("Invalid move distance")
-
-        
 class GeneralKillMove(Move):
 
     def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], kill_pos: Tuple[int, int], piece: Piece, kill_piece: Piece):
@@ -147,6 +135,23 @@ class KillMove(GeneralKillMove):
         super().__init__(src_pos, dst_pos, dst_pos, piece, kill_piece)
  
 
+
+#
+# Special pawn moves
+#
+    
+class PawnDoubleStepMove(NormalMove):
+    
+    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece: Pawn):
+        super().__init__(src_pos, dst_pos, piece)
+
+        if not isinstance(piece, Pawn):
+            raise RuntimeError("Piece must be a pawn")
+
+        if (dst_pos[0] - src_pos[0]) != (2 if piece.is_black else -2) or src_pos[1] != dst_pos[1]:
+            raise RuntimeError("Invalid move distance")
+
+
 class EnPassantMove(GeneralKillMove):
 
     def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], kill_pos: Tuple[int, int], piece, kill_piece: Piece):
@@ -155,4 +160,76 @@ class EnPassantMove(GeneralKillMove):
     def color_board(self, board: Board):
         dst_tile = board.get_tile(self._dst_pos)
         dst_tile.change_to_special()
+
+
+class PawnTransformMove(NormalMove):
+
+    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece: Piece, transform_piece: Piece):
+        super().__init__(src_pos, dst_pos, piece)
+
+        self._transform_piece = transform_piece
+        if not type(self._transform_piece) in [Queen, Rook, Bishop, Knight] or not isinstance(self._piece, Pawn):
+            raise RuntimeError("Invalid move")
+
+    @property
+    def transform_piece(self) -> Piece:
+        return self._transform_piece
+
+    def __repr__(self) -> str:
+        return f"{super().__repr__()}:{self._transform_piece}"
+
+    def execute(self, board: Board) -> None: 
+        super().execute(board)
+        dst_tile = board.get_tile(self._dst_pos)
+        if dst_tile.piece is not self._piece:
+            raise RuntimeError("Cannot execute move")
+        dst_tile.piece = self._transform_piece
+
+    def undo(self, board: Board) -> None:
+        dst_tile = board.get_tile(self._dst_pos)
+        if dst_tile.piece is not self._transform_piece:
+            raise RuntimeError("Cannot undo move")
+        dst_tile.piece = self._piece
+        super().undo(board)
+
+    def color_board(self, board: Board) -> None:
+        dst_tile = board.get_tile(self._dst_pos)
+        dst_tile.change_to_special()
+
+
+class PawnTransformKillMove(KillMove):
+
+    def __init__(self, src_pos: Tuple[int, int], dst_pos: Tuple[int, int], piece: Piece, kill_piece: Piece, transform_piece: Piece):
+        super().__init__(src_pos, dst_pos, piece, kill_piece)
+
+        self._transform_piece = transform_piece
+        if not type(self._transform_piece) in [Queen, Rook, Bishop, Knight] or not isinstance(self._piece, Pawn):
+            raise RuntimeError("Invalid move")
+
+    @property
+    def transform_piece(self) -> Piece:
+        return self._transform_piece
+
+    def __repr__(self) -> str:
+        return f"{super().__repr__()}:{self._transform_piece}"
+
+    def execute(self, board: Board) -> None: 
+        super().execute(board)
+        dst_tile = board.get_tile(self._dst_pos)
+        if dst_tile.piece is not self._piece:
+            raise RuntimeError("Cannot execute move")
+        dst_tile.piece = self._transform_piece
+
+    def undo(self, board: Board) -> None:
+        dst_tile = board.get_tile(self._dst_pos)
+        if dst_tile.piece is not self._transform_piece:
+            raise RuntimeError("Cannot undo move")
+        dst_tile.piece = self._piece
+        super().undo(board)
+
+    def color_board(self, board: Board) -> None:
+        dst_tile = board.get_tile(self._dst_pos)
+        dst_tile.change_to_special()
+
+
         
