@@ -1,7 +1,7 @@
 # Copyright Philipp Neufeld, 2021
 from typing import Tuple
 from chess.board import Board
-from chess.piece import Piece, Pawn, Queen, Rook, Bishop, Knight
+from chess.piece import Piece, Pawn, Queen, Rook, Bishop, Knight, King
 
 class Move:
 
@@ -232,4 +232,74 @@ class PawnTransformKillMove(KillMove):
         dst_tile.change_to_special()
 
 
+#
+# Special king move
+#
+
+class CastelingMove(Move):
+    
+    def __init__(self, king: King, queen_side: bool):
+        super().__init__(king)
+
+        if not isinstance(king, King):
+            raise RuntimeError("Invalid casteling move")
+        self._queen_side = queen_side
+
+        row = 0 if king.is_black else 7
+        self._king_src_pos = (row, 4)
+        self._rook_src_pos = (row, 0 if self._queen_side else 7)
+        self._king_dst_pos = (row, 2 if self._queen_side else 6)
+        self._rook_dst_pos = (row, 3 if self._queen_side else 5)
+
+
+    def __repr__(self) -> str:
+        return "0-0-0" if self._queen_side else "0-0"
+
+    def get_activation_pos(self) -> Tuple[int, int]:
+        return self._king_dst_pos
+
+    def execute(self, board: Board) -> None:
+        king_src_tile = board.get_tile(self._king_src_pos)
+        rook_src_tile = board.get_tile(self._rook_src_pos)
+        king_dst_tile = board.get_tile(self._king_dst_pos)
+        rook_dst_tile = board.get_tile(self._rook_dst_pos)
+
+        valid = king_src_tile.piece is self._piece
+        valid = valid and isinstance(rook_src_tile.piece, Rook)
+        valid = valid and king_src_tile.piece.is_black == rook_src_tile.piece.is_black
+        valid = valid and king_dst_tile.piece is None
+        valid = valid and rook_dst_tile.piece is None
+
+        if not valid:
+            raise RuntimeError("Cannot execute move")
         
+        # execute
+        rook_dst_tile.piece = rook_src_tile.piece
+        rook_src_tile.piece = None
+        king_src_tile.piece = None
+        king_dst_tile.piece = self._piece
+
+    def undo(self, board: Board) -> None:
+        king_src_tile = board.get_tile(self._king_src_pos)
+        rook_src_tile = board.get_tile(self._rook_src_pos)
+        king_dst_tile = board.get_tile(self._king_dst_pos)
+        rook_dst_tile = board.get_tile(self._rook_dst_pos)
+
+        valid = king_dst_tile.piece is self._piece
+        valid = valid and isinstance(rook_dst_tile.piece, Rook)
+        valid = valid and king_dst_tile.piece.is_black != rook_dst_tile.piece.is_black
+        valid = valid and king_src_tile.piece is None
+        valid = valid and rook_src_tile.piece is None
+        
+        if not valid:
+            raise RuntimeError("Cannot undo move")
+        
+        # execute
+        rook_dst_tile.piece = rook_dst_tile.piece
+        rook_dst_tile.piece = None
+        king_dst_tile.piece = None
+        king_dst_tile.piece = self._piece
+
+    def color_board(self, board: Board) -> None:
+        dst_tile = board.get_tile(self._king_dst_pos)
+        dst_tile.change_to_special()

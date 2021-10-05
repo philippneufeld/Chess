@@ -3,7 +3,7 @@ from typing import List, Generator, Tuple
 import itertools
 from chess.piece import Piece, Rook, Knight, Bishop, Queen, King, Pawn
 from chess.board import Board
-from chess.move import Move, NormalMove, GeneralKillMove, KillMove, PawnDoubleStepMove, EnPassantMove, PawnTransformMove, PawnTransformKillMove
+from chess.move import Move, NormalMove, GeneralKillMove, KillMove, PawnDoubleStepMove, EnPassantMove, PawnTransformMove, PawnTransformKillMove, CastelingMove
 
 
 class GameManager:
@@ -32,12 +32,13 @@ class GameManager:
             for j in range(8):
                 self._board.get_tile((pawn_row[i], j)).piece = self._create_piece(is_black[i], Pawn)
 
-        # create moves array and game metrics
+        # create moves array and game metrics (_attacked positions only gives occupied fields)
         self._moves = []
+        self._castle_pieces_move_cnt = {self._board.get_tile(p).piece: 0 for p in [(0,0), (0,4), (0,7), (7, 0), (7, 4), (7, 7)]}
         self._black_turn = False
         self._is_game_over = False
-        self._attacked_positions = {c: list(self.generate_attacked_positions(c)) for c in [False, True]}
         self._is_in_check = {False: False, True: False}
+        self._attacked_positions = {c: list(self.generate_attacked_positions(c)) for c in [False, True]}
         self._available_moves = list(self.generate_all_moves(self._black_turn))
 
         # cache data to allow fast backtracking
@@ -90,9 +91,11 @@ class GameManager:
         self._cached_attacked_positions.append(self._attacked_positions)
         self._cached_is_in_check.append(self._is_in_check)
         self._cached_available_moves.append(self._available_moves)
-        
+
         # update metrics
         self._black_turn = not self._black_turn
+        if move.piece in self._castle_pieces_move_cnt:
+            self._castle_pieces_move_cnt[move.piece] += 1
         self._attacked_positions = {c: list(self.generate_attacked_positions(c)) for c in [False, True]}
         self._is_in_check = {c: self.get_king_position(c) in self._attacked_positions[not c] for c in [False, True]}
         self._available_moves = list(self.generate_all_moves(self._black_turn))
@@ -111,6 +114,8 @@ class GameManager:
         
         # restore cached metrics
         self._black_turn = not self._black_turn
+        if move.piece in self._castle_pieces_move_cnt:
+            self._castle_pieces_move_cnt[move.piece] -= 1
         self._is_game_over = False
         self._attacked_positions = self._cached_attacked_positions.pop()
         self._is_in_check = self._cached_is_in_check.pop()
@@ -145,18 +150,14 @@ class GameManager:
                         if is_pawn_double_step:
                             moves.append(PawnDoubleStepMove(pos, dst_pos, piece))
                         elif is_pawn_transform:
-                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Queen)))
-                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Rook)))
-                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Bishop)))
-                            moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, Knight)))
+                            for ty in [Queen, Rook, Bishop, Knight]:
+                                moves.append(PawnTransformMove(pos, dst_pos, piece, self._create_piece(piece.is_black, ty)))
                         else:
                             moves.append(NormalMove(pos, dst_pos, piece))
                     else:
                         if is_pawn_transform:
-                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Queen)))
-                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Rook)))
-                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Bishop)))
-                            moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, Knight)))
+                            for ty in [Queen, Rook, Bishop, Knight]:
+                                moves.append(PawnTransformKillMove(pos, dst_pos, piece, dst_piece, self._create_piece(piece.is_black, ty)))
                         else:
                             moves.append(KillMove(pos, dst_pos, piece, dst_piece))
 
@@ -168,7 +169,7 @@ class GameManager:
                     if dst_piece is not None:
                         break
             
-            # Generate special moves
+            # Generate en-passant moves
             if isinstance(piece, Pawn) and pos[0] == (4 if piece.is_black else 3):
                 if len(self.moves) > 0 and isinstance(self.moves[-1], PawnDoubleStepMove) and self.moves[-1].piece.is_black != piece.is_black:
                     check_tiles = [(pos[0], pos[1] + 1), (pos[0], pos[1] - 1)]
@@ -183,7 +184,29 @@ class GameManager:
                         
                         if kill_piece is self.moves[-1].piece and dst_piece is None:
                             yield EnPassantMove(pos, dst_pos, kill_pos, piece, kill_piece)
-                    
+            
+            # Generate casteling
+            if isinstance(piece, King):
+                for queen_side in [False, True]:
+                    row = 0 if piece.is_black else 7
+
+                    if piece in self._castle_pieces_move_cnt:
+                        king_original = (pos == (row, 4)) and self._castle_pieces_move_cnt[piece] == 0
+                    else:
+                        king_original = False
+
+                    rook = self.board.get_tile((row, 0 if queen_side else 7)).piece
+                    if rook in self._castle_pieces_move_cnt:
+                        rook_original = self._castle_pieces_move_cnt[rook] == 0
+                    else:
+                        rook_original = False
+
+                    valid = king_original and rook_original and not self._is_in_check[piece.is_black]
+                    for dist in [1, 2]:
+                        valid = valid and self.try_move(NormalMove(pos, (pos[0], pos[1] - (dist if queen_side else -dist)), piece))
+                                    
+                    if valid:
+                        yield CastelingMove(piece, queen_side)
 
 
     def generate_all_moves(self, black: bool, check_test: bool=True) -> Generator[Move, None, None]:
