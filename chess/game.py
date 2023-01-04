@@ -86,6 +86,12 @@ class PlayerBase(threading.Thread):
     def run(self) -> None:
         raise NotImplementedError
 
+    def draw(self, screen) -> None:
+        pass
+
+    def on_tile_clicked(self, mouse_pos: Tuple[int, int]) -> None:
+        pass
+
 
 class Player(PlayerBase):
 
@@ -175,14 +181,14 @@ class Player(PlayerBase):
             self._game_manager.push_move(execute_move)
             self.set_turn_finished()
 
-    def draw(self, screen, black_turn: bool) -> None:
-        if self._transform_selection_mode and black_turn == self._is_black:
+    def draw(self, screen) -> None:
+        if self._transform_selection_mode and self._game_manager.black_turn == self._is_black:
             self._transform_piece_selector.draw(screen, self._is_black)
 
 
 class Game:
 
-    def __init__(self, size, img_path: str) -> None:
+    def __init__(self, size, img_path: str, white_type: type, black_type: type) -> None:
         self._size = size
         self._tile_size = size // 8
 
@@ -194,8 +200,8 @@ class Game:
         img_piece_size = rect.height // 2
 
         self._game_manager = GameManager(self._tile_size, img_pieces, img_piece_size)
-        self.white_player = Player(self._game_manager, False, self._tile_size, img_pieces, img_piece_size)
-        self.black_player = Player(self._game_manager, True, self._tile_size, img_pieces, img_piece_size)
+        self.white_player = white_type(self._game_manager, False, self._tile_size, img_pieces, img_piece_size)
+        self.black_player = black_type(self._game_manager, True, self._tile_size, img_pieces, img_piece_size)
 
         self.white_player.set_finished_callback(self.black_player.execute_turn)
         self.black_player.set_finished_callback(self.white_player.execute_turn)
@@ -203,8 +209,8 @@ class Game:
     def draw(self, screen) -> None:
         self._game_manager.draw(screen)
 
-        self.white_player.draw(screen, self._game_manager.black_turn)
-        self.black_player.draw(screen, self._game_manager.black_turn)
+        self.white_player.draw(screen)
+        self.black_player.draw(screen)
 
         pygame.display.update()
 
@@ -229,6 +235,7 @@ class Game:
 
         self.white_player.start()
         self.black_player.start()
+        self.white_player.execute_turn()
 
         self.draw(screen)
 
