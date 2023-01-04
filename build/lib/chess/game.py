@@ -1,8 +1,7 @@
 # Copyright Philipp Neufeld, 2021
-from typing import Callable, Tuple
+from typing import List, Generator, Tuple
 import pygame
 import time
-import threading
 from chess.move import Move, PawnTransformMove, PawnTransformKillMove
 from chess.piece import Piece, Queen, Rook, Bishop, Knight
 from chess.manager import GameManager
@@ -61,68 +60,53 @@ class TransformPieceSelector:
                 return ty
         return None
 
-class PlayerBase(threading.Thread):
 
-    def __init__(self, game_manager, is_black: bool) -> None:
-        super().__init__(daemon=True)
-        
-        self._game_manager = game_manager
-        self._is_black = is_black
+class Game:
 
-        self._move_finished_callback = None
-        self._wakeup = threading.Event()
-        self._wakeup.clear()
+    def __init__(self, size, img_path):
+        self._size = size
+        self._tile_size = size // 8
 
-    def execute_turn(self) -> None:
-        self._wakeup.set()
+        pygame.init()
+        img_pieces = pygame.image.load(img_path)
+        rect = img_pieces.get_rect()
+        if rect.height * 3 != rect.width or rect.height % 2 != 0:
+            raise RuntimeError("Invalid image dimensions")
+        img_piece_size = rect.height // 2
 
-    def set_turn_finished(self) -> None:
-        if callable(self._move_finished_callback):
-            self._move_finished_callback()
-    
-    def set_finished_callback(self, callback: Callable[[], None]):
-        self._move_finished_callback = callback
-
-    def run(self) -> None:
-        raise NotImplementedError
-
-
-class Player(PlayerBase):
-
-    def __init__(self, game_manager, is_black: bool, tile_size, img_pieces, img_piece_size) -> None:
-        super().__init__(game_manager, is_black)
-        self._tile_size = tile_size
-
-        self._mouse_pos = None
+        self._game_manager = GameManager(self._tile_size, img_pieces, img_piece_size)
 
         self._piece_selected = False
         self._selectable_moves = {}
 
-        self._transform_piece_selector = TransformPieceSelector(8*tile_size, img_pieces, img_piece_size)
+        self._transform_piece_selector = TransformPieceSelector(self._size, img_pieces, img_piece_size)
         self._transform_selection_mode = False
         self._transform_moves = []
+        
 
-    def on_tile_clicked(self, mouse_pos: Tuple[int, int]) -> None:
-        if not self._wakeup.is_set() and self._game_manager.black_turn == self._is_black:
-            self._mouse_pos = mouse_pos
-            self._wakeup.set()
+    def draw(self, screen) -> None:
+        self._game_manager.draw(screen)
 
-    def run(self):
-        while True:
-            self._wakeup.wait()
-            if self._mouse_pos is not None:
-                mouse_pos = self._mouse_pos
-                self._mouse_pos = None
-                self._run(mouse_pos)
-            self._wakeup.clear()
+        if self._transform_selection_mode:
+            self._transform_piece_selector.draw(screen, self._game_manager.black_turn)
 
-    def _run(self, mouse_pos) -> None:
+        pygame.display.update()
+
+    @staticmethod
+    def mouse_pos_in_rect(mouse_pos, rect):
+        if rect[0] <= mouse_pos[0] <= rect[0] + rect[2]:
+            if rect[1] <= mouse_pos[1] <= rect[1] + rect[3]:
+                return True
+        return False
+
+    def on_click(self, mouse_pos: Tuple[int, int]) -> None:
         pos = mouse_pos[1] // self._tile_size, mouse_pos[0] // self._tile_size
 
-        if self._game_manager.is_game_over or self._is_black != self._game_manager.black_turn:
+        self._game_manager.reset_board_highlights()
+
+        if self._game_manager.is_game_over:
             return
 
-        execute_move = None
         if self._transform_selection_mode:
             piece_type = self._transform_piece_selector.select_transform_class(mouse_pos)
             
@@ -134,7 +118,7 @@ class Player(PlayerBase):
                         break
                 if move is None:
                     raise RuntimeError("Tranform move not found")
-                execute_move = move
+                self._game_manager.push_move(move)
 
                 self._transform_moves = []
                 self._transform_selection_mode = False
@@ -144,7 +128,8 @@ class Player(PlayerBase):
             except Exception:
                 piece = None
 
-            if piece is not None and piece.is_black == self._is_black and not self._piece_selected:
+            
+            if piece is not None and piece.is_black == self._game_manager.black_turn and not self._piece_selected:
                 self._game_manager.board.get_tile(pos).change_to_selected()
 
                 self._piece_selected = True
@@ -160,7 +145,7 @@ class Player(PlayerBase):
             else:
                 if pos in self._selectable_moves:
                     if len(self._selectable_moves[pos]) == 1:
-                        execute_move = self._selectable_moves[pos][0]
+                        self._game_manager.push_move(self._selectable_moves[pos][0])
                     elif len(self._selectable_moves[pos]) == 4:
                         self._transform_selection_mode = True
                         self._transform_moves = self._selectable_moves[pos]
@@ -170,65 +155,12 @@ class Player(PlayerBase):
                         raise RuntimeError("Invalid number of selectable move for one board tile")
                 self._piece_selected = False
                 self._selectable_moves = {}
-
-        if execute_move is not None:
-            self._game_manager.push_move(execute_move)
-            self.set_turn_finished()
-
-    def draw(self, screen, black_turn: bool) -> None:
-        if self._transform_selection_mode and black_turn == self._is_black:
-            self._transform_piece_selector.draw(screen, self._is_black)
-
-
-class Game:
-
-    def __init__(self, size, img_path: str) -> None:
-        self._size = size
-        self._tile_size = size // 8
-
-        pygame.init()
-        img_pieces = pygame.image.load(img_path)
-        rect = img_pieces.get_rect()
-        if rect.height * 3 != rect.width or rect.height % 2 != 0:
-            raise RuntimeError("Invalid image dimensions")
-        img_piece_size = rect.height // 2
-
-        self._game_manager = GameManager(self._tile_size, img_pieces, img_piece_size)
-        self.white_player = Player(self._game_manager, False, self._tile_size, img_pieces, img_piece_size)
-        self.black_player = Player(self._game_manager, True, self._tile_size, img_pieces, img_piece_size)
-
-        self.white_player.set_finished_callback(self.black_player.execute_turn)
-        self.black_player.set_finished_callback(self.white_player.execute_turn)
-
-    def draw(self, screen) -> None:
-        self._game_manager.draw(screen)
-
-        self.white_player.draw(screen, self._game_manager.black_turn)
-        self.black_player.draw(screen, self._game_manager.black_turn)
-
-        pygame.display.update()
-
-    @staticmethod
-    def mouse_pos_in_rect(mouse_pos, rect):
-        if rect[0] <= mouse_pos[0] <= rect[0] + rect[2]:
-            if rect[1] <= mouse_pos[1] <= rect[1] + rect[3]:
-                return True
-        return False
-
-    def on_click(self, mouse_pos: Tuple[int, int]) -> None:
-        self._game_manager.reset_board_highlights()
-        if self._game_manager.black_turn:
-            self.black_player.on_tile_clicked(mouse_pos)
-        else:
-            self.white_player.on_tile_clicked(mouse_pos)
+                
 
     def run(self) -> None:
         
         screen = pygame.display.set_mode((self._size, self._size))
         pygame.display.set_caption("Chess")
-
-        self.white_player.start()
-        self.black_player.start()
 
         self.draw(screen)
 
@@ -244,6 +176,6 @@ class Game:
                     self.on_click(event.dict['pos'])
 
             self.draw(screen)
-            pygame.time.delay(1)
+            time.sleep(.01)
 
         pygame.quit()
