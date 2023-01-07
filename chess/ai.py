@@ -7,7 +7,7 @@ from chess.manager import GameManager
 from random import choice
 import time
 from tqdm import tqdm
-from math import sqrt
+import numpy as np
 
 class AIPlayerRandom(PlayerBase):
 
@@ -33,8 +33,9 @@ class AIPlayer(PlayerBase):
     def __init__(self, game_manager, is_black: bool, *args) -> None:
         super().__init__(game_manager, is_black)
 
-    def board_fitness(self, board: Board):
-        score = 0
+    def board_fitness(self, gm: GameManager):
+        score = 0.0
+        board = gm._board
         
         # find pieces
         pieces = {} 
@@ -47,7 +48,7 @@ class AIPlayer(PlayerBase):
 
         piece_score = {
             None: 0,
-            King: 100000,
+            King: 0,
             Queen: 9,
             Rook: 5,
             Bishop: 3,
@@ -58,40 +59,68 @@ class AIPlayer(PlayerBase):
         for piece, pos in pieces.items():
             # single piece score and centrality
             ps = piece_score[type(piece)]
-            dist = sqrt((pos[0]-3.5)**2 + (pos[1]-3.5)**2)
+            dist = np.sqrt((pos[0]-3.5)**2 + (pos[1]-3.5)**2)
             myscore = (1 + 0.02*(5-dist))*ps
             score += (1.0 if piece.is_black else -1.0) * myscore
 
+        # check for mate
+        if gm.is_game_over:
+            if gm.black_turn: # white wins
+                score = -np.inf
+            else: # black wins
+                score = np.inf
+
         return score
 
-    def minimax(self, gm: GameManager, depth: int, pbar = lambda x: x) -> Tuple[float, Move]:
-        minmax = max if gm.black_turn else min
-        score, move = None, None
-        for m in pbar(gm._available_moves):
-            gm.push_move(m)
-            
-            if depth > 0:
-                s, _ = self.minimax(gm, depth-1)
-            else:
-                s = self.board_fitness(gm._board)
+    def _alphabeta(self, gm: GameManager, depth: int, alpha: float, beta: float, pbar = lambda x:x) -> Tuple[float, Move]:
+        if depth == 0:
+            return self.board_fitness(gm), None
 
-            if move is None or minmax(s, score) == s:
-                score, move = s, m
+        best = None
 
-            gm.pop_move()
-        return score, move
+        maximizing = gm.black_turn
+        if maximizing:
+            score = -np.inf
+            for m in pbar(gm._available_moves):
+                gm.push_move(m)
+                s, _ = self._alphabeta(gm, depth-1, alpha, beta)
+                gm.pop_move()
+
+                if s > score:
+                    score, best = s, m
+                if score > beta:
+                    break
+                alpha = max(alpha, score)
+        else:
+            score = np.inf
+            for m in pbar(gm._available_moves):
+                gm.push_move(m)
+                s, _ = self._alphabeta(gm, depth-1, alpha, beta)
+                gm.pop_move()
+                
+                if s < score:
+                    score, best = s, m
+                if score < alpha:
+                    break
+                beta = min(beta, score)
+        
+        return score, best
+
+    def alphabeta(self, gm: GameManager, depth: int, pbar) -> Tuple[float, Move]:
+        return self._alphabeta(gm, depth, -np.inf, np.inf, pbar)
 
     def _run(self):
         gm = self._game_manager
-        gm.preserve_board()        
-        score, move = self.minimax(gm, 1, tqdm)
+        gm.preserve_board()
+        _, move = self.alphabeta(gm, 2, tqdm)
         gm.push_move(move)
         gm.release_preserved_board()
 
     def run(self):
         while True:
             self._wakeup.wait()
-            if self._game_manager.black_turn == self._is_black:
+            if self._game_manager.black_turn == self._is_black \
+                and not self._game_manager._is_game_over:
                 self._run()
                 self.set_turn_finished()
             self._wakeup.clear()
