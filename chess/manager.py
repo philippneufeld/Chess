@@ -1,11 +1,12 @@
 # Copyright Philipp Neufeld, 2021
-from typing import List, Generator, Tuple
+from typing import List, Generator, Tuple, Optional
 import itertools
 import threading
 from chess.piece import Piece, Rook, Knight, Bishop, Queen, King, Pawn
 from chess.board import Board
 from chess.move import Move, NormalMove, GeneralKillMove, KillMove, PawnDoubleStepMove, EnPassantMove, PawnTransformMove, PawnTransformKillMove, CastelingMove
-
+from copy import deepcopy
+import time
 
 class GameManager:
 
@@ -48,6 +49,20 @@ class GameManager:
         self._cached_available_moves = []
         self._cached_attacked_positions = []
         self._cached_is_in_check = []
+
+        # preservable state
+        self._preserved_board = None
+        self._preserved_check = None
+
+    def preserve_board(self) -> None:
+        with self._lock:
+            self._preserved_board = deepcopy(self._board)
+            self._preserved_check = deepcopy(self._is_in_check)
+
+    def release_preserved_board(self) -> None:
+        with self._lock:
+            self._preserved_board = None
+            self._preserved_check = None
 
     def _create_piece(self, is_black: bool, piece_cls: type) -> Piece:
         if not issubclass(piece_cls, Piece):
@@ -138,7 +153,6 @@ class GameManager:
                 # Generate normal moves
                 for basis in piece.get_movement_bases(pos):
                     for i in range(1, basis.max_steps + 1):
-
                         # generate new position
                         dst_pos = pos[0] + i * basis.basis_vec[0], pos[1] + i * basis.basis_vec[1]
                         if not self._board.is_pos_valid(dst_pos):
@@ -147,7 +161,6 @@ class GameManager:
                         # if the dst_piece is friendly cannot occupy its tile
                         dst_piece = self._board.get_tile(dst_pos).piece
 
-                        is_pawn_double_step = isinstance(piece, Pawn) and abs(dst_pos[0] - pos[0]) == 2
                         is_pawn_transform = isinstance(piece, Pawn) and dst_pos[0] == (7 if piece.is_black else 0)
 
                         moves = []
@@ -156,6 +169,7 @@ class GameManager:
                         elif dst_piece is not None and (piece.is_black == dst_piece.is_black or basis.kill_level == 0):
                             break   # cannot kill dst_piece (either friendly or too low kill_level)
                         elif dst_piece is None:
+                            is_pawn_double_step = isinstance(piece, Pawn) and abs(dst_pos[0] - pos[0]) == 2
                             if is_pawn_double_step:
                                 moves.append(PawnDoubleStepMove(pos, dst_pos, piece))
                             elif is_pawn_transform:
@@ -217,8 +231,10 @@ class GameManager:
                         if valid:
                             yield CastelingMove(piece, queen_side)
 
-    def generate_all_moves(self, black: bool, check_test: bool=True) -> Generator[Move, None, None]:
+    def generate_all_moves(self, black: Optional[bool] = None, check_test: bool=True) -> Generator[Move, None, None]:
         with self._lock:
+            if black is None:
+                black = self.black_turn
             for pos in itertools.product(range(8), range(8)):
                 piece = self._board.get_tile(pos).piece
                 if piece is not None and piece.is_black == black:
@@ -240,7 +256,14 @@ class GameManager:
 
     def draw(self, screen) -> None:
         with self._lock:
+            if self._preserved_board is not None:
+                board = self._preserved_board
+                is_check = self._preserved_check
+            else:
+                board = self._board
+                is_check = self._is_in_check
+
             for black in [False, True]:
-                if self._is_in_check[black]:
-                    self._board.get_tile(self.get_king_position(black)).change_to_check()
-            self._board.draw(screen)
+                if is_check[black]:
+                    board.get_tile(self.get_king_position(black)).change_to_check()
+            board.draw(screen)

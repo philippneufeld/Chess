@@ -1,6 +1,7 @@
 # Copyright Philipp Neufeld, 2021
 from typing import List, Generator, Tuple
 import pygame
+from copy import deepcopy
 
 
 class PieceMovementDescriptor:
@@ -27,7 +28,7 @@ class Piece:
 
     def __init__(self, is_black: bool, img, img_idx_x: int, img_size: int):
         self._is_black = is_black
-        
+
         # Handle image
         img_pos = (img_idx_x * img_size, img_size if is_black else 0)
         self._size = img_size
@@ -35,6 +36,20 @@ class Piece:
         self._full_size_img.blit(img, (0, 0), (*img_pos, img_size, img_size))
         self._img = self._full_size_img   
 
+    def __deepcopy__(self, memo):
+        # has to be defined bcause pygame.Surface is incompatible with deepcopy
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if type(v) == pygame.Surface and id(v) not in memo:
+                cv = v.copy()
+                memo[id(v)] = cv
+                setattr(result, k, cv)
+            else:
+                setattr(result, k, deepcopy(v, memo))
+        return result
+     
     def __repr__(self) -> str:
         return "?"
 
