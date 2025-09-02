@@ -3,7 +3,8 @@
 from setuptools import setup
 
 required_packages = [
-    'pygame',
+    "pygame",
+    "tqdm",
 ]
 
 setup(
@@ -13,3 +14,4 @@ setup(
     author="Philipp Neufeld",
     install_requires=required_packages,
 )
+
