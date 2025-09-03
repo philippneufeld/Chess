@@ -3,6 +3,7 @@
 from setuptools import setup
 
 required_packages = [
+    "numpy",
     "pygame",
     "tqdm",
 ]
@@ -14,4 +15,3 @@ setup(
     author="Philipp Neufeld",
     install_requires=required_packages,
 )
-
